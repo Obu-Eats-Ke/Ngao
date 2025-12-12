@@ -22,7 +22,6 @@ rbdc-mysql = "4.6.2"
 rbdc-pg = "4.6.2"
 rbdc-sqlite = "4.6.2"
 rbs = "4.6.2"
-rdbc-sqlite = "0.1.6"
 rust-argon2 = "2.1.0"
 schemars = "0.8.22"
 serde = { version = "1.0.219", features = ["derive"] }

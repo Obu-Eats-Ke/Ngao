@@ -24,17 +24,14 @@ impl KeyRepository {
         let key_pair: Option<KeyPair> = self
             .rb
             .query_decode(
-                "SELECT * FROM key_pair ORDER BY created_at DESC LIMIT 1",
+                "SELECT private_key, public_key, created_at FROM key_pair ORDER BY created_by DESC",
                 vec![],
             )
             .await
             .map_err(|error| error.to_string())?;
-        if let Some(keys) = key_pair {
-            
-            return Ok(keys);
-        } else {
-            let keys = self.create_key_pair().await.map_err(|error| error)?;
-            return Ok(keys);
+        match key_pair {
+            Some(keys) => Ok(keys),
+            None => self.create_key_pair().await.map_err(|error| error),
         }
     }
 
@@ -65,17 +62,45 @@ impl KeyRepository {
         Ok(())
     }
 
-    // if key is key is older than seven days delete and create an new one
-    pub async fn rotate_key_pair(&self) -> Result<(), String> {
-        let elaspsed_time: Option<u64> = self.rb.query_decode("SELECT DATE_PART('day', NOW() - created_at) FROM key_pair ORDER BY created_at DESC LIMIT 1", vec![]).await.map_err(|error| error.to_string())?;
-        if let Some(elasped_time) = elaspsed_time {
-            if elasped_time > 7u64 {
-                self.delete_key_pair().await.map_err(|error| error)?;
-                self.create_key_pair().await.map_err(|error| error)?;
-            }
-        }else{
+    // if key is key is older than tim days delete and create an new one
+    pub async fn rotate_key_pair(&self, days_to_live: u64) -> Result<KeyPair, String> {
+        // Get latest key age in days (if any)
+        let elapsed_days: Option<u64> = self
+            .rb
+            .query_decode(
+                "SELECT DATE_PART('day', NOW() - created_at) 
+             FROM key_pair 
+             ORDER BY created_at DESC LIMIT 1",
+                vec![],
+            )
+            .await
+            .map_err(|e| e.to_string())?;
 
+        // Should we rotate?
+        let should_rotate = match elapsed_days {
+            Some(days) => days >= days_to_live,
+            None => false,
+        };
+
+        if should_rotate {
+            self.delete_key_pair().await.map_err(|e| e.to_string())?;
+            return self.create_key_pair().await.map_err(|e| e.to_string());
         }
-        Ok(())
+
+        // Get existing key pair
+        let existing: Option<KeyPair> = self
+            .rb
+            .query_decode(
+                "SELECT * FROM key_pair ORDER BY created_at DESC LIMIT 1",
+                vec![],
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Return existing or create new
+        match existing {
+            Some(k) => Ok(k),
+            None => self.create_key_pair().await.map_err(|e| e.to_string()),
+        }
     }
 }
